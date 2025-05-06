@@ -11,7 +11,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/chat" element={<ChatPage />} />
+        {/* <Route path="/chat" element={<ChatPage />} /> */}
       </Routes>
     </BrowserRouter>
   );
