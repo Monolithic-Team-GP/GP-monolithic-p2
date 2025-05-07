@@ -1,13 +1,11 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import socket from "../socket/socket";
 import { useNavigate } from "react-router";
+import ChatContext from "../contexts/ChatContext";
 
 export default function ChatPage() {
-  const [message, setMessage] = useState({
-    message: "",
-    name: localStorage.getItem("name"),
-  });
-  const [dataBase, setDataBase] = useState([]);
+  const { dataBase, setDataBase, message, setMessage } =
+    useContext(ChatContext);
 
   const navigate = useNavigate();
 
@@ -15,7 +13,6 @@ export default function ChatPage() {
     if (!localStorage.getItem("name")) {
       navigate("/");
     }
-    fetchChat();
     findUser();
     return () => {
       socket.off("history-message");
