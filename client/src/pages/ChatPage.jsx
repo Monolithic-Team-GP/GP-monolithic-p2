@@ -1,4 +1,61 @@
+import { useEffect, useState } from "react";
+import socket from "../socket/socket";
+import { useNavigate } from "react-router";
+
 export default function ChatPage() {
+  const [message, setMessage] = useState({
+    message: "",
+    name: localStorage.getItem("name"),
+  });
+  const [dataBase, setDataBase] = useState([]);
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!localStorage.getItem("name")) {
+      navigate("/");
+    }
+    fetchChat();
+    findUser();
+    return () => {
+      socket.off("history-message");
+      socket.off("message");
+    };
+  }, []);
+
+  function findUser() {
+    socket.auth = {
+      name: localStorage.getItem("name"),
+    };
+    socket.disconnect().connect();
+  }
+
+  function fetchChat() {
+    socket.on("history-message", (db) => {
+      setDataBase(db);
+    });
+  }
+
+  function sendMessage(e) {
+    e.preventDefault();
+    try {
+      socket.emit("message", message);
+
+      setTimeout(() => {
+        setMessage({
+          message: "",
+          name: localStorage.getItem("name"),
+        });
+      }, 300);
+    } catch (error) {
+      console.log("🚀 ~ sendMessage ~ error:", error);
+    }
+  }
+
+  function change(e) {
+    setMessage({ ...message, [e.target.name]: e.target.value });
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#36393f] text-white">
       {/* Sidebar: User List */}
@@ -37,29 +94,35 @@ export default function ChatPage() {
         {/* Messages Area */}
         <section className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#36393f] bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] bg-repeat">
           {/* Incoming Message */}
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-gray-600 flex-shrink-0" />
-            <div className="bg-[#40444b] p-3 rounded-lg max-w-md">
-              <p className="text-sm font-semibold">pengguna1</p>
-              <p className="text-sm text-gray-200">Halo semua!</p>
-            </div>
-          </div>
+          {dataBase.map((el) => {
+            return (
+              <div key={el.id}>
+                {el.name === localStorage.getItem("name") ? (
+                  <div className="flex justify-end">
+                    <div className="bg-[#7289da] p-3 rounded-lg max-w-md text-white">
+                      <p className="text-sm font-semibold">{el.name}</p>
+                      <p className="text-sm">{el.message}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gray-600 flex-shrink-0" />
+                    <div className="bg-[#40444b] p-3 rounded-lg max-w-md">
+                      <p className="text-sm font-semibold">{el.name}</p>
+                      <p className="text-sm text-gray-200">{el.message}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {/* Outgoing Message */}
-          <div className="flex justify-end">
-            <div className="bg-[#7289da] p-3 rounded-lg max-w-md text-white">
-              <p className="text-sm font-semibold">kamu</p>
-              <p className="text-sm">Hai! Selamat datang.</p>
-            </div>
-          </div>
         </section>
 
         {/* Chat Input */}
         <footer className="bg-[#40444b] p-4 shadow-inner">
-          <form
-            className="flex items-center gap-2"
-            onSubmit={(e) => e.preventDefault()}
-          >
+          <form className="flex items-center gap-2" onSubmit={sendMessage}>
             {/* Upload Button */}
             <label
               htmlFor="file-upload"
@@ -71,6 +134,9 @@ export default function ChatPage() {
 
             {/* Text Input */}
             <input
+              name="message"
+              value={message.message}
+              onChange={change}
               type="text"
               placeholder="Ketik pesan..."
               className="flex-1 px-4 py-2 rounded-md bg-[#2f3136] text-white focus:outline-none focus:ring-2 focus:ring-[#7289da]"
