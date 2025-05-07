@@ -56,6 +56,31 @@ export default function ChatPage() {
     setMessage({ ...message, [e.target.name]: e.target.value });
   }
 
+  useEffect(() => {
+    socket.on("public-moderation-warning", (data) => {
+      // Create a warning element to display in the chat
+      const warningElement = document.createElement("div");
+      warningElement.className = "moderation-warning";
+      warningElement.innerHTML = `
+        <strong>Moderation Notice:</strong> 
+        Peringatan untuk ${data.userName} karena melanggar aturan aplikasi.
+        <p class="warning-message">${data.warning}</p>
+      `;
+
+      // Add the warning to your chat container
+      const chatContainer = document.querySelector(".chat-container"); // Adjust selector as needed
+      chatContainer.appendChild(warningElement);
+
+      // Optional: Scroll to the bottom to show the new warning
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    });
+
+    // Add this cleanup function to remove the listener when unmounting
+    return () => {
+      socket.off("public-moderation-warning");
+    };
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#36393f] text-white">
       {/* Sidebar: User List */}
@@ -92,7 +117,7 @@ export default function ChatPage() {
         </header>
 
         {/* Messages Area */}
-        <section className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#36393f] bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] bg-repeat">
+        <section className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#36393f] bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] bg-repeat chat-container">
           {/* Incoming Message */}
           {dataBase.map((el) => {
             return (
