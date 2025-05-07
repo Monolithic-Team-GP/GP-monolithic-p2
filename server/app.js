@@ -11,7 +11,7 @@ const httpServer = createServer();
 const io = new Server(httpServer, {
   cors: {
     origin: "*",
-    methods: ['GET', 'POST']
+    methods: ["GET", "POST"],
   },
 });
 
@@ -79,8 +79,10 @@ let dataBase = {
 
 io.on("connection", (socket) => {
   // NEW vv
-  console.log('User connected:', socket.id);
+  console.log("User connected:", socket.id);
   // NEW ^^
+
+  io.emit("history-message", dataBase.message);
 
   socket.on("image", async (data) => {
     try {
@@ -118,7 +120,7 @@ io.on("connection", (socket) => {
 
     const messageToSave = {
       id: dataBase.message.length ? dataBase.message.length + 1 : 1,
-      name: data.name,
+      name: socket.handshake.auth.name,
       message: moderationResult.censoredText,
       imageUrl: "",
       isModerated: !moderationResult.isSafe,
@@ -147,52 +149,52 @@ io.on("connection", (socket) => {
 
   // NEW vv
   // Room management
-  socket.on('join-room', (roomId) => {
+  socket.on("join-room", (roomId) => {
     socket.join(roomId);
-    
+
     if (!rooms.has(roomId)) {
       rooms.set(roomId, { users: new Set([socket.id]), creator: socket.id });
     } else {
       rooms.get(roomId).users.add(socket.id);
     }
-    
+
     // Notify room members about new user
-    socket.to(roomId).emit('user-joined', socket.id);
+    socket.to(roomId).emit("user-joined", socket.id);
     updateRoomUsers(roomId);
   });
 
   // WebRTC signaling with room-specific routing
-  socket.on('call-user', (data) => {
-    socket.to(data.target).emit('call-made', { 
+  socket.on("call-user", (data) => {
+    socket.to(data.target).emit("call-made", {
       offer: data.offer,
       caller: socket.id,
-      room: data.roomId
+      room: data.roomId,
     });
   });
 
-  socket.on('make-answer', (data) => {
-    socket.to(data.target).emit('answer-made', {
+  socket.on("make-answer", (data) => {
+    socket.to(data.target).emit("answer-made", {
       answer: data.answer,
-      answerer: socket.id
+      answerer: socket.id,
     });
   });
 
-  socket.on('ice-candidate', (data) => {
-    socket.to(data.target).emit('ice-candidate', {
+  socket.on("ice-candidate", (data) => {
+    socket.to(data.target).emit("ice-candidate", {
       candidate: data.candidate,
-      from: socket.id
+      from: socket.id,
     });
   });
 
   // Cleanup on disconnect
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
     rooms.forEach((roomData, roomId) => {
       if (roomData.users.has(socket.id)) {
         roomData.users.delete(socket.id);
-        socket.to(roomId).emit('user-left', socket.id);
+        socket.to(roomId).emit("user-left", socket.id);
         updateRoomUsers(roomId);
-        
+
         if (roomData.users.size === 0) {
           rooms.delete(roomId);
         }
@@ -202,7 +204,7 @@ io.on("connection", (socket) => {
 
   function updateRoomUsers(roomId) {
     const roomUsers = Array.from(rooms.get(roomId)?.users || []);
-    io.to(roomId).emit('room-users', roomUsers);
+    io.to(roomId).emit("room-users", roomUsers);
   }
   // NEW ^^
 });
