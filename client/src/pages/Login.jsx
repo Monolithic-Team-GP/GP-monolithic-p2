@@ -1,6 +1,6 @@
 export default function Login() {
   return (
-    <>
+    <div className="flex items-center justify-center min-h-screen bg-gray-900">
       <div className="bg-[#23272a] p-8 rounded-lg shadow-lg w-full max-w-md text-white">
         <h1 className="text-2xl font-semibold mb-6 text-center">Welcome!</h1>
         <form>
@@ -29,6 +29,6 @@ export default function Login() {
         </form>
         <p className="text-center text-xs text-gray-400 mt-6" />
       </div>
-    </>
+    </div>
   );
 }
