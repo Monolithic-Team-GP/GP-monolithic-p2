@@ -58,7 +58,6 @@ export default function ChatPage() {
 
   useEffect(() => {
     socket.on("public-moderation-warning", (data) => {
-      // Create a warning element to display in the chat
       const warningElement = document.createElement("div");
       warningElement.className = "moderation-warning";
       warningElement.innerHTML = `
@@ -67,15 +66,12 @@ export default function ChatPage() {
         <p class="warning-message">${data.warning}</p>
       `;
 
-      // Add the warning to your chat container
-      const chatContainer = document.querySelector(".chat-container"); // Adjust selector as needed
+      const chatContainer = document.querySelector(".chat-container");
       chatContainer.appendChild(warningElement);
 
-      // Optional: Scroll to the bottom to show the new warning
       chatContainer.scrollTop = chatContainer.scrollHeight;
     });
 
-    // Add this cleanup function to remove the listener when unmounting
     return () => {
       socket.off("public-moderation-warning");
     };
