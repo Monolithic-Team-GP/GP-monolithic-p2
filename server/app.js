@@ -1,8 +1,10 @@
-require("dotenv").config();
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config();
+}
 const cloudinary = require("cloudinary").v2;
 const express = require("express");
 const app = express();
-const PORT = 3000;
+// const PORT = 3000;
 
 const { createServer } = require("http");
 const { Server } = require("socket.io");
@@ -209,6 +211,8 @@ io.on("connection", (socket) => {
   // NEW ^^
 });
 
-httpServer.listen(PORT, () => {
-  console.log("Server listening on PORT", PORT);
-});
+// httpServer.listen(PORT, () => {
+//   console.log("Server listening on PORT", PORT);
+// });
+
+module.exports = app;
