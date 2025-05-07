@@ -1,213 +1,225 @@
 import { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 
-const socket = io('https://02a6-139-228-111-119.ngrok-free.app/', {
+// Ganti URL sesuai server kamu
+const socket = io('https://bde8-139-228-111-119.ngrok-free.app/', {
   extraHeaders: {
     'ngrok-skip-browser-warning': true
   }
 });
 
+const ROOM_ID = 'room-1'; // Bisa diganti dinamis
+
 export default function ChatRoom() {
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
   const [input, setInput] = useState('');
-  const peerConnectionRef = useRef(null);
-  const localStreamRef = useRef(null);
-  const audioRef = useRef(null);
   const [callActive, setCallActive] = useState(false);
-  const [isInitiator, setIsInitiator] = useState(false);
-  const iceCandidateBufferRef = useRef([]);
 
+  // Untuk group call, simpan peerConnection per userId
+  const peerConnectionsRef = useRef({});
+  // Simpan audio ref per userId
+  const audioRefs = useRef({});
+  // Simpan local stream
+  const localStreamRef = useRef(null);
+  // Simpan ICE candidate buffer per user
+  const iceCandidateBufferRef = useRef({});
+
+  // Join room & listen events
   useEffect(() => {
-    // Initialize peer connection once
-    peerConnectionRef.current = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    });
+    socket.emit('join-room', ROOM_ID);
 
-    // Chat message handling
     socket.on('chat message', (data) => {
       setMessages(prev => [...prev, data]);
     });
 
-    socket.on('users', (data) => {
-      setUsers(Object.values(data));
+    socket.on('room-users', (userIds) => {
+      setUsers(userIds);
+      // Buat peer connection untuk user baru
+      userIds.forEach(userId => {
+        if (userId !== socket.id && !peerConnectionsRef.current[userId]) {
+          createPeerConnection(userId);
+        }
+      });
     });
 
-    // WebRTC signaling events
-    peerConnectionRef.current.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit('ice-candidate', { candidate: event.candidate });
-      }
-    };
-
-    peerConnectionRef.current.ontrack = (event) => {
-
-      console.log(event, "<<<s");
-      console.log(audioRef, "<<<s");
-      
-      if (audioRef.current) {
-        audioRef.current.srcObject = event.streams[0];
-      }
-    };
-
-    // Socket events for signaling
-    socket.on('call-made', async (data) => {
-      try {
-        console.log("Call received from:", data.caller);
-        await setupMediaStream();
-
-        iceCandidateBufferRef.current = [];
-
-        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
-        console.log("Remote description set successfully (call-made)");
-
-        while (iceCandidateBufferRef.current.length > 0) {
-          const candidate = iceCandidateBufferRef.current.shift();
-          try {
-            await peerConnectionRef.current.addIceCandidate(candidate);
-            console.log("Processed buffered ICE candidate");
-          } catch (err) {
-            console.error("Error processing buffered candidate:", err);
-          }
-        }
-
-        const answer = await peerConnectionRef.current.createAnswer();
-        await peerConnectionRef.current.setLocalDescription(answer);
-
-        socket.emit('make-answer', { answer });
-        setCallActive(true);
-      } catch (error) {
-        console.error("Error handling incoming call:", error);
+    socket.on('user-joined', (userId) => {
+      if (userId !== socket.id && !peerConnectionsRef.current[userId]) {
+        createPeerConnection(userId);
       }
     });
 
-    socket.on('answer-made', async (data) => {
-      try {
-        console.log("Answer received from:", data.answerer);
-        if (isInitiator && peerConnectionRef.current.signalingState !== "stable") {
-          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-          console.log("Remote description set successfully (answer-made)");
+    socket.on('user-left', (userId) => {
+      if (peerConnectionsRef.current[userId]) {
+        peerConnectionsRef.current[userId].close();
+        delete peerConnectionsRef.current[userId];
+      }
+      if (audioRefs.current[userId]) {
+        audioRefs.current[userId].srcObject = null;
+        delete audioRefs.current[userId];
+      }
+      setUsers(prev => prev.filter(u => u !== userId));
+    });
 
-          while (iceCandidateBufferRef.current.length > 0) {
-            const candidate = iceCandidateBufferRef.current.shift();
-            try {
-              await peerConnectionRef.current.addIceCandidate(candidate);
-              console.log("Processed buffered ICE candidate");
-            } catch (err) {
-              console.error("Error processing buffered candidate:", err);
-            }
-          }
+    // Signaling events
+    socket.on('call-made', async ({ offer, caller }) => {
+      await setupMediaStream();
+      const pc = peerConnectionsRef.current[caller];
+      if (!pc) return;
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      // Proses buffered ICE candidate
+      if (iceCandidateBufferRef.current[caller]) {
+        while (iceCandidateBufferRef.current[caller].length > 0) {
+          const candidate = iceCandidateBufferRef.current[caller].shift();
+          await pc.addIceCandidate(candidate);
         }
-      } catch (error) {
-        console.error("Error setting remote description:", error);
+      }
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('make-answer', { answer, target: caller });
+      setCallActive(true);
+    });
+
+    socket.on('answer-made', async ({ answer, answerer }) => {
+      const pc = peerConnectionsRef.current[answerer];
+      if (!pc) return;
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      // Proses buffered ICE candidate
+      if (iceCandidateBufferRef.current[answerer]) {
+        while (iceCandidateBufferRef.current[answerer].length > 0) {
+          const candidate = iceCandidateBufferRef.current[answerer].shift();
+          await pc.addIceCandidate(candidate);
+        }
       }
     });
 
-    socket.on('ice-candidate', async (data) => {
-      if (!data.candidate) return;
-      console.log("ICE candidate received from:", data.from);
-
-      try {
-        if (peerConnectionRef.current.remoteDescription) {
-          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-          console.log("ICE candidate added successfully");
-        } else {
-          console.log("Buffering ICE candidate until remote description is set");
-          iceCandidateBufferRef.current.push(new RTCIceCandidate(data.candidate));
-        }
-      } catch (err) {
-        console.error("Error handling ICE candidate:", err);
+    socket.on('ice-candidate', async ({ candidate, from }) => {
+      const pc = peerConnectionsRef.current[from];
+      if (!pc) return;
+      if (pc.remoteDescription) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        if (!iceCandidateBufferRef.current[from]) iceCandidateBufferRef.current[from] = [];
+        iceCandidateBufferRef.current[from].push(new RTCIceCandidate(candidate));
       }
     });
 
     return () => {
       socket.off('chat message');
+      socket.off('room-users');
+      socket.off('user-joined');
+      socket.off('user-left');
       socket.off('call-made');
       socket.off('answer-made');
       socket.off('ice-candidate');
-
+      // Cleanup peer connections
+      Object.values(peerConnectionsRef.current).forEach(pc => pc.close());
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
-
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-      }
     };
-  }, [isInitiator]);
+    // eslint-disable-next-line
+  }, []);
 
+  // Setup local audio stream
   const setupMediaStream = async () => {
     if (!localStreamRef.current) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         localStreamRef.current = stream;
-
-        stream.getTracks().forEach(track =>
-          peerConnectionRef.current.addTrack(track, stream)
-        );
-
+        // Tambahkan track ke semua peer connection yang sudah ada
+        Object.values(peerConnectionsRef.current).forEach(pc => {
+          stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        });
         return true;
       } catch (error) {
-        console.error("Error accessing media devices:", error);
+        alert("Unable to access microphone");
         return false;
       }
     }
     return true;
   };
 
-  const callUser = async () => {
-    try {
-      setIsInitiator(true);
+  // Membuat peer connection ke userId
+  const createPeerConnection = (userId) => {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
 
-      const mediaReady = await setupMediaStream();
-      if (!mediaReady) return;
-
-      iceCandidateBufferRef.current = [];
-
-      const offer = await peerConnectionRef.current.createOffer();
-      await peerConnectionRef.current.setLocalDescription(offer);
-
-      socket.emit('call-user', { offer });
-      setCallActive(true);
-
-      setUsers(prevUsers => {
-        return prevUsers.map(user => {
-          if (user.id === socket.id) {
-            return { ...user, inCall: true };
-          }
-          return user;
-        });
-      });
-
-    } catch (error) {
-      console.error("Error starting call:", error);
-      alert("Could not start call: " + error.message);
+    // Tambahkan local stream jika sudah ada
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
     }
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit('ice-candidate', { target: userId, candidate: event.candidate });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      // Set audio untuk userId ini
+      let audio = audioRefs.current[userId];
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = `audio-${userId}`;
+        audio.autoplay = true;
+        audio.playsInline = true;
+        audioRefs.current[userId] = audio;
+        document.body.appendChild(audio);
+      }
+      audio.srcObject = event.streams[0];
+    };
+
+    peerConnectionsRef.current[userId] = pc;
   };
 
+  // Mulai group call (panggil semua user lain)
+  const startGroupCall = async () => {
+    const ok = await setupMediaStream();
+    if (!ok) return;
+    for (const userId of users) {
+      if (userId !== socket.id) {
+        const pc = peerConnectionsRef.current[userId];
+        if (!pc) continue;
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('call-user', { offer, target: userId });
+      }
+    }
+    setCallActive(true);
+  };
+
+  // Chat
   const sendMessage = () => {
     if (input.trim() === '') return;
     socket.emit('chat message', input);
     setInput('');
   };
 
+  // Render audio element untuk setiap lawan bicara
+  const renderAudioElements = () => {
+    return users.filter(u => u !== socket.id).map(userId => (
+      <audio key={userId} id={`audio-${userId}`} autoPlay playsInline ref={el => { if (el) audioRefs.current[userId] = el; }} />
+    ));
+  };
+
   return (
     <>
       <div>
-        <h2>AI Chatroom</h2>
+        <h2>AI Chatroom (Group Voice Call)</h2>
         <div>
           <button
             type="button"
             className="btn btn-primary"
             data-bs-toggle="modal"
             data-bs-target="#exampleModal"
-            onClick={() => console.log(users)}
           >
             Launch demo modal
           </button>
         </div>
 
-        <audio ref={audioRef} autoPlay playsInline />
+        {renderAudioElements()}
 
         <div style={{ height: '300px', overflowY: 'scroll', border: '1px solid gray', margin: '10px 0', padding: '10px' }}>
           {messages.map((m, i) => (
@@ -238,10 +250,10 @@ export default function ChatRoom() {
             <div className="modal-header">
               <h1 className="modal-title fs-5" id="exampleModalLabel">
                 <button
-                  onClick={callUser}
-                  // disabled={callActive}
+                  onClick={startGroupCall}
+                  disabled={callActive}
                 >
-                  {callActive ? 'Voice Call Active' : 'Start Voice Call'}
+                  {callActive ? 'Voice Call Active' : 'Start Group Voice Call'}
                 </button>
               </h1>
               <button
@@ -252,9 +264,9 @@ export default function ChatRoom() {
               />
             </div>
             <div className="modal-body">
-              {users.map((user, index) => (
+              {users.map((userId, index) => (
                 <div key={index} className="user-list">
-                  <div>{`${user.id} ${user.inCall ? '(in call)' : ''}`}</div>
+                  <div>{`${userId} ${userId === socket.id ? '(You)' : ''}`}</div>
                 </div>
               ))}
             </div>
@@ -266,9 +278,6 @@ export default function ChatRoom() {
               >
                 Close
               </button>
-              <button type="button" className="btn btn-primary">
-                Save changes
-              </button>
             </div>
           </div>
         </div>
@@ -276,4 +285,3 @@ export default function ChatRoom() {
     </>
   );
 }
-
