@@ -11,6 +11,7 @@ const httpServer = createServer();
 const io = new Server(httpServer, {
   cors: {
     origin: "*",
+    methods: ['GET', 'POST']
   },
 });
 
@@ -23,6 +24,10 @@ cloudinary.config({
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// NEW vv
+const rooms = new Map(); // Store room data: { users: Set, creator: socketId }
+// NEW ^^
 
 const model = genAI.getGenerativeModel({
   model: "gemini-2.0-flash",
@@ -73,6 +78,10 @@ let dataBase = {
 };
 
 io.on("connection", (socket) => {
+  // NEW vv
+  console.log('User connected:', socket.id);
+  // NEW ^^
+
   socket.on("image", async (data) => {
     try {
       const uploadOptions = {
@@ -135,6 +144,67 @@ io.on("connection", (socket) => {
 
     io.emit("history-message", dataBase.message);
   });
+
+  // NEW vv
+  // Room management
+  socket.on('join-room', (roomId) => {
+    socket.join(roomId);
+    
+    if (!rooms.has(roomId)) {
+      rooms.set(roomId, { users: new Set([socket.id]), creator: socket.id });
+    } else {
+      rooms.get(roomId).users.add(socket.id);
+    }
+    
+    // Notify room members about new user
+    socket.to(roomId).emit('user-joined', socket.id);
+    updateRoomUsers(roomId);
+  });
+
+  // WebRTC signaling with room-specific routing
+  socket.on('call-user', (data) => {
+    socket.to(data.target).emit('call-made', { 
+      offer: data.offer,
+      caller: socket.id,
+      room: data.roomId
+    });
+  });
+
+  socket.on('make-answer', (data) => {
+    socket.to(data.target).emit('answer-made', {
+      answer: data.answer,
+      answerer: socket.id
+    });
+  });
+
+  socket.on('ice-candidate', (data) => {
+    socket.to(data.target).emit('ice-candidate', {
+      candidate: data.candidate,
+      from: socket.id
+    });
+  });
+
+  // Cleanup on disconnect
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+    rooms.forEach((roomData, roomId) => {
+      if (roomData.users.has(socket.id)) {
+        roomData.users.delete(socket.id);
+        socket.to(roomId).emit('user-left', socket.id);
+        updateRoomUsers(roomId);
+        
+        if (roomData.users.size === 0) {
+          rooms.delete(roomId);
+        }
+      }
+    });
+  });
+
+  function updateRoomUsers(roomId) {
+    const roomUsers = Array.from(rooms.get(roomId)?.users || []);
+    io.to(roomId).emit('room-users', roomUsers);
+  }
+  // NEW ^^
 });
 
 httpServer.listen(PORT, () => {

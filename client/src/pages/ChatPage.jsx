@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState, useRef } from "react";
 import socket from "../socket/socket";
 import { useNavigate } from "react-router";
 import ChatContext from "../contexts/ChatContext";
@@ -10,6 +10,27 @@ export default function ChatPage() {
 
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
+  const [callActive, setCallActive] = useState(false);
+  const [users, setUsers] = useState([]);
+
+  // NEW vv
+
+const ROOM_ID = 'room-1'; // Bisa diganti dinamis
+
+
+  // Untuk group call, simpan peerConnection per userId
+    const peerConnectionsRef = useRef({});
+    // Simpan audio ref per userId
+    const audioRefs = useRef({});
+    // Simpan local stream
+    const localStreamRef = useRef(null);
+    // Simpan ICE candidate buffer per user
+    const iceCandidateBufferRef = useRef({});
+  
+
+  // NEW ^^
+
+
 
   useEffect(() => {
     if (!localStorage.getItem("name")) {
@@ -129,6 +150,144 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
+
+    // NEW vv
+
+    socket.emit('join-room', ROOM_ID);
+
+    socket.on('chat message', (data) => {
+      setMessages(prev => [...prev, data]);
+    });
+
+    socket.on('room-users', (userIds) => {
+      setUsers(userIds);
+      // Buat peer connection untuk user baru
+      userIds.forEach(userId => {
+        if (userId !== socket.id && !peerConnectionsRef.current[userId]) {
+          createPeerConnection(userId);
+        }
+      });
+    });
+
+    socket.on('user-joined', (userId) => {
+      if (userId !== socket.id && !peerConnectionsRef.current[userId]) {
+        createPeerConnection(userId);
+      }
+    });
+
+    socket.on('user-left', (userId) => {
+      if (peerConnectionsRef.current[userId]) {
+        peerConnectionsRef.current[userId].close();
+        delete peerConnectionsRef.current[userId];
+      }
+      if (audioRefs.current[userId]) {
+        audioRefs.current[userId].srcObject = null;
+        delete audioRefs.current[userId];
+      }
+      setUsers(prev => prev.filter(u => u !== userId));
+    });
+
+    // Signaling events
+    socket.on('call-made', async ({ offer, caller }) => {
+      await setupMediaStream();
+      const pc = peerConnectionsRef.current[caller];
+      if (!pc) return;
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      // Proses buffered ICE candidate
+      if (iceCandidateBufferRef.current[caller]) {
+        while (iceCandidateBufferRef.current[caller].length > 0) {
+          const candidate = iceCandidateBufferRef.current[caller].shift();
+          await pc.addIceCandidate(candidate);
+        }
+      }
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('make-answer', { answer, target: caller });
+      setCallActive(true);
+    });
+
+    socket.on('answer-made', async ({ answer, answerer }) => {
+      const pc = peerConnectionsRef.current[answerer];
+      if (!pc) return;
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      // Proses buffered ICE candidate
+      if (iceCandidateBufferRef.current[answerer]) {
+        while (iceCandidateBufferRef.current[answerer].length > 0) {
+          const candidate = iceCandidateBufferRef.current[answerer].shift();
+          await pc.addIceCandidate(candidate);
+        }
+      }
+    });
+
+    socket.on('ice-candidate', async ({ candidate, from }) => {
+      const pc = peerConnectionsRef.current[from];
+      if (!pc) return;
+      if (pc.remoteDescription) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        if (!iceCandidateBufferRef.current[from]) iceCandidateBufferRef.current[from] = [];
+        iceCandidateBufferRef.current[from].push(new RTCIceCandidate(candidate));
+      }
+    });
+
+    // Setup local audio stream
+  const setupMediaStream = async () => {
+    if (!localStreamRef.current) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStreamRef.current = stream;
+        // Tambahkan track ke semua peer connection yang sudah ada
+        Object.values(peerConnectionsRef.current).forEach(pc => {
+          stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        });
+        return true;
+      } catch (error) {
+        alert("Unable to access microphone");
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Membuat peer connection ke userId
+  const createPeerConnection = (userId) => {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+
+    // Tambahkan local stream jika sudah ada
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+    }
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit('ice-candidate', { target: userId, candidate: event.candidate });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      // Set audio untuk userId ini
+      let audio = audioRefs.current[userId];
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = `audio-${userId}`;
+        audio.autoplay = true;
+        audio.playsInline = true;
+        audioRefs.current[userId] = audio;
+        document.body.appendChild(audio);
+      }
+      audio.srcObject = event.streams[0];
+    };
+
+    peerConnectionsRef.current[userId] = pc;
+  };
+
+
+    // NEW ^^
+
+
+
     socket.on("image", (data) => {
       console.log("🚀 ~ socket.on ~ data:", data.url);
       setIsUploading(false);
@@ -156,6 +315,23 @@ export default function ChatPage() {
     return () => {
       socket.off("image");
       socket.off("error");
+
+      // NEW
+
+      socket.off('chat message');
+      socket.off('room-users');
+      socket.off('user-joined');
+      socket.off('user-left');
+      socket.off('call-made');
+      socket.off('answer-made');
+      socket.off('ice-candidate');
+      // Cleanup peer connections
+      Object.values(peerConnectionsRef.current).forEach(pc => pc.close());
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+
+      //NEW
     };
   }, []);
 
@@ -179,6 +355,29 @@ export default function ChatPage() {
       socket.off("public-moderation-warning");
     };
   }, []);
+
+  // Mulai group call (panggil semua user lain)
+  const startGroupCall = async () => {
+    const ok = await setupMediaStream();
+    if (!ok) return;
+    for (const userId of users) {
+      if (userId !== socket.id) {
+        const pc = peerConnectionsRef.current[userId];
+        if (!pc) continue;
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('call-user', { offer, target: userId });
+      }
+    }
+    setCallActive(true);
+  };
+
+  // Render audio element untuk setiap lawan bicara
+  const renderAudioElements = () => {
+    return users.filter(u => u !== socket.id).map(userId => (
+      <audio key={userId} id={`audio-${userId}`} autoPlay playsInline ref={el => { if (el) audioRefs.current[userId] = el; }} />
+    ));
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#36393f] text-white">
@@ -209,11 +408,15 @@ export default function ChatPage() {
           <h1 className="text-2xl font-semibold">Grup Chat</h1>
           <button
             className="flex items-center gap-2 px-4 py-2 bg-[#7289da] hover:bg-[#5b6eae] text-white rounded-md font-medium transition"
-            onClick={() => alert("Voice call diaktifkan! (simulasi)")}
+            data-bs-toggle="modal"
+            data-bs-target="#exampleModal"
           >
             🎤 Voice Call
           </button>
         </header>
+
+        {renderAudioElements()}
+
 
         {/* Messages Area */}
         <section className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#36393f] bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] bg-repeat chat-container">
@@ -305,6 +508,50 @@ export default function ChatPage() {
             </button>
           </form>
         </footer>
+        <div
+          className="modal fade"
+          id="exampleModal"
+          tabIndex={-1}
+          aria-labelledby="exampleModalLabel"
+          aria-hidden="true"
+        >
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h1 className="modal-title fs-5" id="exampleModalLabel">
+                  <button
+                    onClick={startGroupCall}
+                    disabled={callActive}
+                  >
+                    {callActive ? 'Voice Call Active' : 'Start Group Voice Call'}
+                  </button>
+                </h1>
+                <button
+                  type="button"
+                  className="btn-close"
+                  data-bs-dismiss="modal"
+                  aria-label="Close"
+                />
+              </div>
+              <div className="modal-body">
+                {users.map((userId, index) => (
+                <div key={index} className="user-list">
+                  <div>{`${userId} ${userId === socket.id ? '(You)' : ''}`}</div>
+                </div>
+              ))}
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  data-bs-dismiss="modal"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   );
