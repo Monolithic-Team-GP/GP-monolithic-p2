@@ -4,10 +4,13 @@ if (process.env.NODE_ENV !== "production") {
 const cloudinary = require("cloudinary").v2;
 const express = require("express");
 const app = express();
+const cors = require("cors");
 // const PORT = 3000;
 
 const { createServer } = require("http");
 const { Server } = require("socket.io");
+
+app.use(cors());
 
 const httpServer = createServer();
 const io = new Server(httpServer, {
