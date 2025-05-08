@@ -1,8 +1,9 @@
-import { useContext, useEffect, useState, useRef } from "react";
+import { useContext, useEffect, useState, useRef, use } from "react";
 import socket from "../socket/socket";
 import { useNavigate } from "react-router";
 import ChatContext from "../contexts/ChatContext";
 import Swal from "sweetalert2";
+import SideBar from "../components/SideBar";
 
 export default function ChatPage() {
   const { dataBase, setDataBase, message, setMessage } =
@@ -12,6 +13,7 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [callActive, setCallActive] = useState(false);
   const [users, setUsers] = useState([]);
+  const [otherUser, setOtherUser] = useState();
 
   // NEW vv
 
@@ -34,13 +36,13 @@ export default function ChatPage() {
   // Fungsi untuk toggle modal
   const toggleModal = () => {
     setIsModalOpen(!isModalOpen);
+    socket.off("call-user");
   };
 
   useEffect(() => {
     if (!localStorage.getItem("name")) {
       navigate("/");
     }
-    findUser();
     fetchChat();
 
     return () => {
@@ -49,13 +51,6 @@ export default function ChatPage() {
       socket.off("error");
     };
   }, []);
-
-  function findUser() {
-    socket.auth = {
-      name: localStorage.getItem("name"),
-    };
-    socket.disconnect().connect();
-  }
 
   function fetchChat() {
     socket.on("history-message", (db) => {
@@ -66,6 +61,11 @@ export default function ChatPage() {
     socket.on("error", (errorMsg) => {
       console.error("Socket error:", errorMsg);
       alert("Error: " + errorMsg);
+    });
+
+    socket.on("data-user-online", (data) => {
+      // console.log("🚀 ~ socket.on ~ data-user-online:", data);
+      setOtherUser(data);
     });
   }
 
@@ -400,43 +400,41 @@ export default function ChatPage() {
       ));
   };
 
+  function leave() {
+    socket.emit("leave", localStorage.getItem("name"));
+    localStorage.removeItem("name");
+    navigate("/");
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#36393f] text-white">
       {/* Sidebar: User List */}
-      <aside className="w-64 bg-[#23272a] p-4 flex flex-col overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">Pengguna Online</h2>
-        <ul className="space-y-3">
-          <li className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gray-500 rounded-full" />
-            <span className="text-sm">pengguna1</span>
-          </li>
-          <li className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-500 rounded-full" />
-            <span className="text-sm">pengguna2</span>
-          </li>
-          <li className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-500 rounded-full" />
-            <span className="text-sm">pengguna3</span>
-          </li>
-          {/* Tambahkan lebih banyak user di sini */}
-        </ul>
-      </aside>
+      <SideBar />
 
       {/* Chat area */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="px-6 py-4 bg-[#2c2f33] border-b border-[#202225] flex items-center justify-between shadow-md">
           <h1 className="text-2xl font-semibold">Grup Chat</h1>
-          <button
-            onClick={() => {
-              toggleModal(); // Buka modal
-              // Jangan hapus ini agar tetap menjalankan fungsi panggilan
-              startGroupCall();
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-[#7289da] hover:bg-[#5b6eae] text-white rounded-md font-medium transition"
-          >
-            🎤 Voice Call
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                toggleModal();
+                startGroupCall();
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#7289da] hover:bg-[#5b6eae] text-white rounded-md font-medium transition"
+            >
+              🎤 Voice Call
+            </button>
+            <button
+              onClick={() => {
+                leave();
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-[oklch(55.5%_0.163_48.998)] hover:bg-[oklch(48.8%_0.243_264.376)] text-white rounded-md font-medium transition"
+            >
+              Leave
+            </button>
+          </div>
         </header>
 
         {renderAudioElements()}
@@ -571,16 +569,16 @@ export default function ChatPage() {
                   Pengguna dalam Panggilan:
                 </h3>
                 <ul className="space-y-2">
-                  {users.map((userId) => (
-                    <li
-                      key={userId}
-                      className="bg-[#2f3136] p-2 rounded text-sm"
-                    >
-                      {userId === socket.id ? `${userId} (Anda)` : userId}
+                  {otherUser.map((name, idx) => (
+                    <li key={idx} className="bg-[#2f3136] p-2 rounded text-sm">
+                      {socket.auth.name === name
+                        ? `${socket.auth.name} (Anda)`
+                        : name}
                     </li>
                   ))}
                 </ul>
               </div>
+              {/* {console.log(socket.auth.name)} */}
 
               {/* Footer */}
               <div className="flex justify-between p-4 border-t border-[#202225]">
@@ -588,6 +586,7 @@ export default function ChatPage() {
                   onClick={() => {
                     // Tambahkan kode untuk mengakhiri panggilan di sini jika perlu
                     setCallActive(false);
+                    socket.off("call-user");
                   }}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
                 >

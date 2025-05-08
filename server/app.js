@@ -82,12 +82,29 @@ let dataBase = {
   message: [],
 };
 
+let dbUser = [];
+
 io.on("connection", (socket) => {
   // NEW vv
   console.log("User connected:", socket.id);
   // NEW ^^
 
   io.emit("history-message", dataBase.message);
+
+  socket.on("leave", (name) => {
+    dbUser = dbUser.filter((user) => user !== name);
+    io.emit("data-user-online", dbUser);
+  });
+
+  socket.on("user-login", (data) => {
+    if (socket.handshake.auth.name) {
+      dbUser.push(socket.handshake.auth.name);
+    }
+    dbUser = [...new Set(dbUser)];
+    io.emit("data-user-online", dbUser);
+  });
+
+  io.emit("data-user-online", dbUser);
 
   socket.on("image", async (data) => {
     try {
