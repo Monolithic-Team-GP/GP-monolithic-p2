@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, useRef } from "react";
+import { useContext, useEffect, useState, useRef, use } from "react";
 import socket from "../socket/socket";
 import { useNavigate } from "react-router";
 import ChatContext from "../contexts/ChatContext";
@@ -13,6 +13,7 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [callActive, setCallActive] = useState(false);
   const [users, setUsers] = useState([]);
+  const [otherUser, setOtherUser] = useState();
 
   // NEW vv
 
@@ -60,6 +61,11 @@ export default function ChatPage() {
       console.error("Socket error:", errorMsg);
       alert("Error: " + errorMsg);
     });
+
+    socket.on("data-user-online", (data) => {
+      // console.log("🚀 ~ socket.on ~ data-user-online:", data);
+      setOtherUser(data);
+    })
   }
 
   function sendMessage(e) {
@@ -547,16 +553,17 @@ export default function ChatPage() {
                   Pengguna dalam Panggilan:
                 </h3>
                 <ul className="space-y-2">
-                  {users.map((userId) => (
+                  {otherUser.map((name, idx) => (
                     <li
-                      key={userId}
+                      key={idx}
                       className="bg-[#2f3136] p-2 rounded text-sm"
                     >
-                      {userId === socket.id ? `${userId} (Anda)` : userId}
+                      {socket.auth.name === name ? `${socket.auth.name} (Anda)` : name}
                     </li>
                   ))}
                 </ul>
               </div>
+              {/* {console.log(socket.auth.name)} */}
 
               {/* Footer */}
               <div className="flex justify-between p-4 border-t border-[#202225]">
