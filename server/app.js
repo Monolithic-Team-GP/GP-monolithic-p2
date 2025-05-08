@@ -5,8 +5,6 @@ const cloudinary = require("cloudinary").v2;
 const express = require("express");
 const app = express();
 const cors = require("cors");
-// const PORT = 3000;
-
 const { createServer } = require("http");
 const { Server } = require("socket.io");
 
@@ -30,9 +28,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// NEW vv
-const rooms = new Map(); // Store room data: { users: Set, creator: socketId }
-// NEW ^^
+const rooms = new Map();
 
 const model = genAI.getGenerativeModel({
   model: "gemini-2.0-flash",
@@ -85,10 +81,7 @@ let dataBase = {
 let dbUser = [];
 
 io.on("connection", (socket) => {
-  // NEW vv
   console.log("User connected:", socket.id);
-  // NEW ^^
-
   io.emit("history-message", dataBase.message);
 
   socket.on("leave", (name) => {
@@ -169,8 +162,6 @@ io.on("connection", (socket) => {
     io.emit("history-message", dataBase.message);
   });
 
-  // NEW vv
-  // Room management
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
 
@@ -180,12 +171,10 @@ io.on("connection", (socket) => {
       rooms.get(roomId).users.add(socket.id);
     }
 
-    // Notify room members about new user
     socket.to(roomId).emit("user-joined", socket.id);
     updateRoomUsers(roomId);
   });
 
-  // WebRTC signaling with room-specific routing
   socket.on("call-user", (data) => {
     socket.to(data.target).emit("call-made", {
       offer: data.offer,
@@ -208,7 +197,6 @@ io.on("connection", (socket) => {
     });
   });
 
-  // Cleanup on disconnect
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
     rooms.forEach((roomData, roomId) => {
@@ -228,11 +216,6 @@ io.on("connection", (socket) => {
     const roomUsers = Array.from(rooms.get(roomId)?.users || []);
     io.to(roomId).emit("room-users", roomUsers);
   }
-  // NEW ^^
 });
-
-// httpServer.listen(PORT, () => {
-//   console.log("Server listening on PORT", PORT);
-// });
 
 module.exports = httpServer;
