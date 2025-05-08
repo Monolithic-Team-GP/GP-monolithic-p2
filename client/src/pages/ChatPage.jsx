@@ -3,6 +3,7 @@ import socket from "../socket/socket";
 import { useNavigate } from "react-router";
 import ChatContext from "../contexts/ChatContext";
 import Swal from "sweetalert2";
+import SideBar from "../components/SideBar";
 
 export default function ChatPage() {
   const { dataBase, setDataBase, message, setMessage } =
@@ -40,7 +41,6 @@ export default function ChatPage() {
     if (!localStorage.getItem("name")) {
       navigate("/");
     }
-    findUser();
     fetchChat();
 
     return () => {
@@ -49,13 +49,6 @@ export default function ChatPage() {
       socket.off("error");
     };
   }, []);
-
-  function findUser() {
-    socket.auth = {
-      name: localStorage.getItem("name"),
-    };
-    socket.disconnect().connect();
-  }
 
   function fetchChat() {
     socket.on("history-message", (db) => {
@@ -403,24 +396,7 @@ export default function ChatPage() {
   return (
     <div className="flex h-screen overflow-hidden bg-[#36393f] text-white">
       {/* Sidebar: User List */}
-      <aside className="w-64 bg-[#23272a] p-4 flex flex-col overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">Pengguna Online</h2>
-        <ul className="space-y-3">
-          <li className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gray-500 rounded-full" />
-            <span className="text-sm">pengguna1</span>
-          </li>
-          <li className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-500 rounded-full" />
-            <span className="text-sm">pengguna2</span>
-          </li>
-          <li className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-500 rounded-full" />
-            <span className="text-sm">pengguna3</span>
-          </li>
-          {/* Tambahkan lebih banyak user di sini */}
-        </ul>
-      </aside>
+      <SideBar />
 
       {/* Chat area */}
       <main className="flex-1 flex flex-col overflow-hidden">
