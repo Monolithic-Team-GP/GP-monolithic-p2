@@ -215,4 +215,4 @@ io.on("connection", (socket) => {
 //   console.log("Server listening on PORT", PORT);
 // });
 
-module.exports = app;
+module.exports = httpServer;
