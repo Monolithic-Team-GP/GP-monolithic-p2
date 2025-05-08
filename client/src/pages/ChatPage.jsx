@@ -36,6 +36,7 @@ export default function ChatPage() {
   // Fungsi untuk toggle modal
   const toggleModal = () => {
     setIsModalOpen(!isModalOpen);
+    socket.off("call-user");
   };
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function ChatPage() {
     socket.on("data-user-online", (data) => {
       // console.log("🚀 ~ socket.on ~ data-user-online:", data);
       setOtherUser(data);
-    })
+    });
   }
 
   function sendMessage(e) {
@@ -399,6 +400,12 @@ export default function ChatPage() {
       ));
   };
 
+  function leave() {
+    socket.emit("leave", localStorage.getItem("name"));
+    localStorage.removeItem("name");
+    navigate("/");
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#36393f] text-white">
       {/* Sidebar: User List */}
@@ -409,16 +416,25 @@ export default function ChatPage() {
         {/* Header */}
         <header className="px-6 py-4 bg-[#2c2f33] border-b border-[#202225] flex items-center justify-between shadow-md">
           <h1 className="text-2xl font-semibold">Grup Chat</h1>
-          <button
-            onClick={() => {
-              toggleModal(); // Buka modal
-              // Jangan hapus ini agar tetap menjalankan fungsi panggilan
-              startGroupCall();
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-[#7289da] hover:bg-[#5b6eae] text-white rounded-md font-medium transition"
-          >
-            🎤 Voice Call
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                toggleModal();
+                startGroupCall();
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#7289da] hover:bg-[#5b6eae] text-white rounded-md font-medium transition"
+            >
+              🎤 Voice Call
+            </button>
+            <button
+              onClick={() => {
+                leave();
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-[oklch(55.5%_0.163_48.998)] hover:bg-[oklch(48.8%_0.243_264.376)] text-white rounded-md font-medium transition"
+            >
+              Leave
+            </button>
+          </div>
         </header>
 
         {renderAudioElements()}
@@ -554,11 +570,10 @@ export default function ChatPage() {
                 </h3>
                 <ul className="space-y-2">
                   {otherUser.map((name, idx) => (
-                    <li
-                      key={idx}
-                      className="bg-[#2f3136] p-2 rounded text-sm"
-                    >
-                      {socket.auth.name === name ? `${socket.auth.name} (Anda)` : name}
+                    <li key={idx} className="bg-[#2f3136] p-2 rounded text-sm">
+                      {socket.auth.name === name
+                        ? `${socket.auth.name} (Anda)`
+                        : name}
                     </li>
                   ))}
                 </ul>
@@ -571,6 +586,7 @@ export default function ChatPage() {
                   onClick={() => {
                     // Tambahkan kode untuk mengakhiri panggilan di sini jika perlu
                     setCallActive(false);
+                    socket.off("call-user");
                   }}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
                 >
