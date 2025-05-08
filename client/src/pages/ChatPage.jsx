@@ -15,25 +15,14 @@ export default function ChatPage() {
   const [users, setUsers] = useState([]);
   const [otherUser, setOtherUser] = useState();
 
-  // NEW vv
-
-  const ROOM_ID = "room-1"; // Bisa diganti dinamis
-
-  // Untuk group call, simpan peerConnection per userId
+  const ROOM_ID = "room-1";
   const peerConnectionsRef = useRef({});
-  // Simpan audio ref per userId
   const audioRefs = useRef({});
-  // Simpan local stream
   const localStreamRef = useRef(null);
-  // Simpan ICE candidate buffer per user
   const iceCandidateBufferRef = useRef({});
 
-  // NEW ^^
-
-  // Tambahkan state untuk modal
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Fungsi untuk toggle modal
   const toggleModal = () => {
     setIsModalOpen(!isModalOpen);
     socket.off("call-user");
@@ -64,7 +53,6 @@ export default function ChatPage() {
     });
 
     socket.on("data-user-online", (data) => {
-      // console.log("🚀 ~ socket.on ~ data-user-online:", data);
       setOtherUser(data);
     });
   }
@@ -154,8 +142,6 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
-    // NEW vv
-
     socket.emit("join-room", ROOM_ID);
 
     socket.on("chat message", (data) => {
@@ -164,7 +150,6 @@ export default function ChatPage() {
 
     socket.on("room-users", (userIds) => {
       setUsers(userIds);
-      // Buat peer connection untuk user baru
       userIds.forEach((userId) => {
         if (userId !== socket.id && !peerConnectionsRef.current[userId]) {
           createPeerConnection(userId);
@@ -190,13 +175,11 @@ export default function ChatPage() {
       setUsers((prev) => prev.filter((u) => u !== userId));
     });
 
-    // Signaling events
     socket.on("call-made", async ({ offer, caller }) => {
       await setupMediaStream();
       const pc = peerConnectionsRef.current[caller];
       if (!pc) return;
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      // Proses buffered ICE candidate
       if (iceCandidateBufferRef.current[caller]) {
         while (iceCandidateBufferRef.current[caller].length > 0) {
           const candidate = iceCandidateBufferRef.current[caller].shift();
@@ -213,7 +196,6 @@ export default function ChatPage() {
       const pc = peerConnectionsRef.current[answerer];
       if (!pc) return;
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      // Proses buffered ICE candidate
       if (iceCandidateBufferRef.current[answerer]) {
         while (iceCandidateBufferRef.current[answerer].length > 0) {
           const candidate = iceCandidateBufferRef.current[answerer].shift();
@@ -236,15 +218,11 @@ export default function ChatPage() {
       }
     });
 
-    // Setup local audio stream
-
-    // Membuat peer connection ke userId
     const createPeerConnection = (userId) => {
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
 
-      // Tambahkan local stream jika sudah ada
       if (localStreamRef.current) {
         localStreamRef.current
           .getTracks()
@@ -261,7 +239,6 @@ export default function ChatPage() {
       };
 
       pc.ontrack = (event) => {
-        // Set audio untuk userId ini
         let audio = audioRefs.current[userId];
         if (!audio) {
           audio = document.createElement("audio");
@@ -276,8 +253,6 @@ export default function ChatPage() {
 
       peerConnectionsRef.current[userId] = pc;
     };
-
-    // NEW ^^
 
     socket.on("image", (data) => {
       console.log("🚀 ~ socket.on ~ data:", data.url);
@@ -306,9 +281,6 @@ export default function ChatPage() {
     return () => {
       socket.off("image");
       socket.off("error");
-
-      // NEW
-
       socket.off("chat message");
       socket.off("room-users");
       socket.off("user-joined");
@@ -316,13 +288,10 @@ export default function ChatPage() {
       socket.off("call-made");
       socket.off("answer-made");
       socket.off("ice-candidate");
-      // Cleanup peer connections
       Object.values(peerConnectionsRef.current).forEach((pc) => pc.close());
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
       }
-
-      //NEW
     };
   }, []);
 
@@ -354,7 +323,6 @@ export default function ChatPage() {
           audio: true,
         });
         localStreamRef.current = stream;
-        // Tambahkan track ke semua peer connection yang sudah ada
         Object.values(peerConnectionsRef.current).forEach((pc) => {
           stream.getTracks().forEach((track) => pc.addTrack(track, stream));
         });
@@ -367,7 +335,6 @@ export default function ChatPage() {
     return true;
   };
 
-  // Mulai group call (panggil semua user lain)
   const startGroupCall = async () => {
     const ok = await setupMediaStream();
     if (!ok) return;
@@ -383,7 +350,33 @@ export default function ChatPage() {
     setCallActive(true);
   };
 
-  // Render audio element untuk setiap lawan bicara
+  const endCall = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+
+    Object.values(peerConnectionsRef.current).forEach((pc) => {
+      if (pc) pc.close();
+    });
+    peerConnectionsRef.current = {};
+
+    Object.keys(audioRefs.current).forEach((userId) => {
+      const audio = audioRefs.current[userId];
+      if (audio) {
+        audio.srcObject = null;
+        if (audio.parentNode) {
+          audio.parentNode.removeChild(audio);
+        }
+      }
+    });
+    audioRefs.current = {};
+
+    setCallActive(false);
+    socket.emit("leave-call", ROOM_ID);
+    toggleModal();
+  };
+
   const renderAudioElements = () => {
     return users
       .filter((u) => u !== socket.id)
@@ -408,12 +401,9 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#36393f] text-white">
-      {/* Sidebar: User List */}
       <SideBar />
 
-      {/* Chat area */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <header className="px-6 py-4 bg-[#2c2f33] border-b border-[#202225] flex items-center justify-between shadow-md">
           <h1 className="text-2xl font-semibold">Grup Chat</h1>
           <div className="flex gap-2">
@@ -439,9 +429,7 @@ export default function ChatPage() {
 
         {renderAudioElements()}
 
-        {/* Messages Area */}
         <section className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#36393f] bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] bg-repeat chat-container">
-          {/* Incoming Message */}
           {dataBase.map((el) => {
             return (
               <div key={el.id}>
@@ -482,14 +470,10 @@ export default function ChatPage() {
               </div>
             );
           })}
-
-          {/* Outgoing Message */}
         </section>
 
-        {/* Chat Input */}
         <footer className="bg-[#40444b] p-4 shadow-inner">
           <form className="flex items-center gap-2" onSubmit={sendMessage}>
-            {/* Upload Button */}
             <label
               htmlFor="file-upload"
               className="cursor-pointer flex items-center justify-center w-10 h-10 bg-[#2f3136] hover:bg-[#36393f] text-gray-300 rounded-md transition"
@@ -502,15 +486,12 @@ export default function ChatPage() {
               className="hidden"
               onChange={handleFileUpload}
             />
-
-            {/* Better upload indicator */}
             {isUploading && (
               <div className="fixed top-0 left-0 right-0 bg-[#7289da] text-white p-2 text-center animate-pulse">
                 Compressing and uploading image... Please wait
               </div>
             )}
 
-            {/* Text Input */}
             <input
               name="message"
               value={message.message}
@@ -520,7 +501,6 @@ export default function ChatPage() {
               className="flex-1 px-4 py-2 rounded-md bg-[#2f3136] text-white focus:outline-none focus:ring-2 focus:ring-[#7289da]"
             />
 
-            {/* Send Button */}
             <button
               type="submit"
               className="px-4 py-2 bg-[#7289da] hover:bg-[#5b6eae] text-white font-semibold rounded-md"
@@ -532,7 +512,6 @@ export default function ChatPage() {
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
             <div className="bg-[#36393f] rounded-lg shadow-lg w-full max-w-md">
-              {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-[#202225]">
                 <h2 className="text-lg font-semibold text-white">Voice Call</h2>
                 <button
@@ -554,8 +533,6 @@ export default function ChatPage() {
                   </svg>
                 </button>
               </div>
-
-              {/* Body */}
               <div className="p-4 max-h-[60vh] overflow-y-auto">
                 <p
                   className={`text-center mb-4 ${
@@ -578,16 +555,9 @@ export default function ChatPage() {
                   ))}
                 </ul>
               </div>
-              {/* {console.log(socket.auth.name)} */}
-
-              {/* Footer */}
               <div className="flex justify-between p-4 border-t border-[#202225]">
                 <button
-                  onClick={() => {
-                    // Tambahkan kode untuk mengakhiri panggilan di sini jika perlu
-                    setCallActive(false);
-                    socket.off("call-user");
-                  }}
+                  onClick={endCall}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
                 >
                   Akhiri Panggilan
