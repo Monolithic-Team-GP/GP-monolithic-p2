@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, useRef, use } from "react";
+import { useContext, useEffect, useState, useRef } from "react";
 import socket from "../socket/socket";
 import { useNavigate } from "react-router";
 import ChatContext from "../contexts/ChatContext";
@@ -20,6 +20,7 @@ export default function ChatPage() {
   const audioRefs = useRef({});
   const localStreamRef = useRef(null);
   const iceCandidateBufferRef = useRef({});
+  const chatContainerRef = useRef(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -316,6 +317,13 @@ export default function ChatPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop =
+        chatContainerRef.current.scrollHeight;
+    }
+  }, [dataBase]);
+
   const setupMediaStream = async () => {
     if (!localStreamRef.current) {
       try {
@@ -400,19 +408,21 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#36393f] text-white">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-indigo-900 to-purple-900 text-white">
       <SideBar />
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="px-6 py-4 bg-[#2c2f33] border-b border-[#202225] flex items-center justify-between shadow-md">
-          <h1 className="text-2xl font-semibold">Grup Chat</h1>
-          <div className="flex gap-2">
+        <header className="px-6 py-4 bg-black/30 backdrop-blur-sm border-b border-white/10 flex items-center justify-between shadow-lg">
+          <h1 className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-300">
+            Grup Chat
+          </h1>
+          <div className="flex gap-3">
             <button
               onClick={() => {
                 toggleModal();
                 startGroupCall();
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-[#7289da] hover:bg-[#5b6eae] text-white rounded-md font-medium transition"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-md font-medium transition shadow-md hover:shadow-lg"
             >
               🎤 Voice Call
             </button>
@@ -420,7 +430,7 @@ export default function ChatPage() {
               onClick={() => {
                 leave();
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-[oklch(55.5%_0.163_48.998)] hover:bg-[oklch(48.8%_0.243_264.376)] text-white rounded-md font-medium transition"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 text-white rounded-md font-medium transition shadow-md hover:shadow-lg"
             >
               Leave
             </button>
@@ -429,40 +439,51 @@ export default function ChatPage() {
 
         {renderAudioElements()}
 
-        <section className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#36393f] bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] bg-repeat chat-container">
+        <section
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto p-6 space-y-4 bg-black/20 backdrop-blur-sm chat-container"
+        >
           {dataBase.map((el) => {
             return (
-              <div key={el.id}>
+              <div key={el.id} className="animate-fadeIn">
                 {el.name === localStorage.getItem("name") ? (
                   <div className="flex justify-end">
-                    <div className="bg-[#7289da] p-3 rounded-lg max-w-md text-white">
-                      <p className="text-sm font-semibold">{el.name}</p>
+                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 rounded-2xl rounded-tr-sm max-w-md text-white shadow-lg">
+                      <p className="text-sm font-semibold text-purple-200">
+                        {el.name}
+                      </p>
                       {el.imageUrl ? (
                         <img
                           src={el.imageUrl}
                           alt="Shared image"
-                          className="max-w-full rounded mt-2"
+                          className="max-w-full rounded-lg mt-2 border border-purple-300/30"
                           style={{ maxHeight: "200px" }}
                         />
                       ) : (
-                        <p className="text-sm">{el.message}</p>
+                        <p className="text-base">{el.message}</p>
                       )}
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gray-600 flex-shrink-0" />
-                    <div className="bg-[#40444b] p-3 rounded-lg max-w-md">
-                      <p className="text-sm font-semibold">{el.name}</p>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex-shrink-0 flex items-center justify-center text-lg font-bold">
+                      {el.name && el.name.charAt(0)
+                        ? el.name.charAt(0).toUpperCase()
+                        : "?"}
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl rounded-tl-sm max-w-md shadow-lg border border-white/10">
+                      <p className="text-sm font-semibold text-purple-300">
+                        {el.name || "Unknown User"}
+                      </p>
                       {el.imageUrl ? (
                         <img
                           src={el.imageUrl}
                           alt="Shared image"
-                          className="max-w-full rounded mt-2"
+                          className="max-w-full rounded-lg mt-2 border border-white/20"
                           style={{ maxHeight: "200px" }}
                         />
                       ) : (
-                        <p className="text-sm text-gray-200">{el.message}</p>
+                        <p className="text-base text-gray-100">{el.message}</p>
                       )}
                     </div>
                   </div>
@@ -472,11 +493,11 @@ export default function ChatPage() {
           })}
         </section>
 
-        <footer className="bg-[#40444b] p-4 shadow-inner">
-          <form className="flex items-center gap-2" onSubmit={sendMessage}>
+        <footer className="bg-black/30 backdrop-blur-sm p-4 shadow-lg border-t border-white/10">
+          <form className="flex items-center gap-3" onSubmit={sendMessage}>
             <label
               htmlFor="file-upload"
-              className="cursor-pointer flex items-center justify-center w-10 h-10 bg-[#2f3136] hover:bg-[#36393f] text-gray-300 rounded-md transition"
+              className="cursor-pointer flex items-center justify-center w-10 h-10 bg-indigo-900/60 hover:bg-indigo-700 text-purple-200 rounded-full transition shadow-md"
             >
               📎
             </label>
@@ -487,7 +508,7 @@ export default function ChatPage() {
               onChange={handleFileUpload}
             />
             {isUploading && (
-              <div className="fixed top-0 left-0 right-0 bg-[#7289da] text-white p-2 text-center animate-pulse">
+              <div className="fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-2 text-center animate-pulse z-50">
                 Compressing and uploading image... Please wait
               </div>
             )}
@@ -498,25 +519,28 @@ export default function ChatPage() {
               onChange={change}
               type="text"
               placeholder="Ketik pesan..."
-              className="flex-1 px-4 py-2 rounded-md bg-[#2f3136] text-white focus:outline-none focus:ring-2 focus:ring-[#7289da]"
+              className="flex-1 px-4 py-3 rounded-full bg-white/10 text-white placeholder-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white/15 border border-white/10"
             />
 
             <button
               type="submit"
-              className="px-4 py-2 bg-[#7289da] hover:bg-[#5b6eae] text-white font-semibold rounded-md"
+              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-semibold rounded-full shadow-md hover:shadow-lg transition"
             >
               Kirim
             </button>
           </form>
         </footer>
+
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="bg-[#36393f] rounded-lg shadow-lg w-full max-w-md">
-              <div className="flex items-center justify-between p-4 border-b border-[#202225]">
-                <h2 className="text-lg font-semibold text-white">Voice Call</h2>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-xl shadow-2xl w-full max-w-md border border-white/10">
+              <div className="flex items-center justify-between p-5 border-b border-white/10">
+                <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-pink-200">
+                  Voice Call
+                </h2>
                 <button
                   onClick={toggleModal}
-                  className="text-gray-400 hover:text-white"
+                  className="text-purple-300 hover:text-white transition"
                 >
                   <svg
                     className="w-6 h-6"
@@ -533,21 +557,24 @@ export default function ChatPage() {
                   </svg>
                 </button>
               </div>
-              <div className="p-4 max-h-[60vh] overflow-y-auto">
+              <div className="p-5 max-h-[60vh] overflow-y-auto">
                 <p
-                  className={`text-center mb-4 ${
-                    callActive ? "text-green-500" : "text-white"
+                  className={`text-center mb-6 text-lg ${
+                    callActive ? "text-green-400" : "text-purple-200"
                   }`}
                 >
                   {callActive ? "Panggilan Aktif" : "Memulai Panggilan..."}
                 </p>
 
-                <h3 className="text-white font-medium mb-2">
+                <h3 className="text-purple-200 font-medium mb-3">
                   Pengguna dalam Panggilan:
                 </h3>
                 <ul className="space-y-2">
                   {otherUser.map((name, idx) => (
-                    <li key={idx} className="bg-[#2f3136] p-2 rounded text-sm">
+                    <li
+                      key={idx}
+                      className="bg-white/10 p-3 rounded-lg text-base border border-white/5 shadow-sm"
+                    >
                       {socket.auth.name === name
                         ? `${socket.auth.name} (Anda)`
                         : name}
@@ -555,16 +582,16 @@ export default function ChatPage() {
                   ))}
                 </ul>
               </div>
-              <div className="flex justify-between p-4 border-t border-[#202225]">
+              <div className="flex justify-between p-5 border-t border-white/10">
                 <button
                   onClick={endCall}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
+                  className="px-5 py-3 bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white rounded-lg shadow-md hover:shadow-lg transition"
                 >
                   Akhiri Panggilan
                 </button>
                 <button
                   onClick={toggleModal}
-                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md"
+                  className="px-5 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg shadow-md hover:shadow-lg transition"
                 >
                   Tutup
                 </button>
