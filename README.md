@@ -48,7 +48,7 @@ ThisCord/
 ### 1. Clone the Repository
 
 ```sh
-git clone https://github.com/username/ThisCord.git
+git clone https://github.com/Monolithic-Team-GP/GP-monolithic-p2.git
 cd ThisCord
 ```
 
