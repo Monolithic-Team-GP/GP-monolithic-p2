@@ -20,7 +20,7 @@ ThisCord is a modern group chat application platform that combines real-time cha
 ## Project Structure
 
 ```
-ThisCord/
+GP-monolithic-p2/
 │
 ├── client/         # React Frontend (Vite)
 │   ├── src/
@@ -49,7 +49,7 @@ ThisCord/
 
 ```sh
 git clone https://github.com/Monolithic-Team-GP/GP-monolithic-p2.git
-cd ThisCord
+cd GP-monolithic-p2
 ```
 
 ### 2. Setup Server (Backend)
@@ -108,7 +108,7 @@ cd ThisCord
 - **Voice Call**: Uses WebRTC, make sure your browser supports microphone access.
 - **AI Moderation**: Messages containing inappropriate words will be censored and users will receive a warning.
 - **Data Storage**: Messages and online users are only stored while the server is running (in-memory, not a database).
-- **Socket Configuration**: Make sure the Socket.IO server URL in the frontend (`client/src/socket/socket.js`) matches your backend address.
+- **Socket Configuration**: Make sure the Socket.IO server URL in the frontend ([`client/src/socket/socket.js`](client/src/socket/socket.js)) matches your backend address.
 
 ---
 
